@@ -78,7 +78,7 @@ pub async fn get_migros_keys<F, Fut>(
     fetch_sheet_values: F,
 ) -> Result<Vec<MigrosKeysRow>>
 where
-    F: Fn(&str, &str, &str) -> Fut + Send + Sync,
+    F: for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) -> Fut + Send + Sync,
     Fut: Future<Output = Result<GoogleSheetResponse>> + Send,
 {
     let sheet_values = fetch_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
