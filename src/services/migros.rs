@@ -16,11 +16,11 @@ use tokio::{
     time::{Duration, sleep},
 };
 
+use crate::schemas::struct_google_api::GoogleSheetResponse;
 use crate::schemas::struct_migros::{MigrosKeysRow};
-use crate::services::google_api_sheet::{get_sheet_values};
 
-pub const KEYS_SHEET_ID: &str = "1accka-4YjSUwd27UNgG3xcpWy4Inz0W4E_NVNfT3-xk";
-pub const MIGROS_KEYS_RANGE: &str = "MİGROS!A2:I";
+const KEYS_SHEET_ID: &str = "1accka-4YjSUwd27UNgG3xcpWy4Inz0W4E_NVNfT3-xk";
+const MIGROS_KEYS_RANGE: &str = "MİGROS!A2:I";
 
 pub fn parse_migros_keys(row: &[String]) -> Result<MigrosKeysRow> {
     if row.len() < 9 {
@@ -49,11 +49,39 @@ pub fn parse_migros_keys(row: &[String]) -> Result<MigrosKeysRow> {
     })
 }
 
-pub async fn filter_migros_keys_by_branch(
+pub async fn filter_migros_keys_by_branch<F, Fut>(
     auth_token: &str,
     branch_name: &str,
-) -> Result<Vec<MigrosKeysRow>> {
-    let sheet_values = get_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
+    get_migros_keys: F,
+) -> Result<Vec<MigrosKeysRow>>
+where
+    F: Fn(&str) -> Fut + Send + Sync,
+    Fut: Future<Output = Result<Vec<MigrosKeysRow>>> + Send,
+{
+    let keys = get_migros_keys(auth_token).await?;
+    let filtered_keys: Vec<MigrosKeysRow> = keys
+        .into_iter()
+        .filter(|key| key.branch_name == branch_name)
+        .collect();
+
+    info!(
+        "✅ '{}' şubesi için {} anahtar bulundu.",
+        branch_name,
+        filtered_keys.len(),
+    );
+
+    Ok(filtered_keys)
+}
+
+pub async fn get_migros_keys<F, Fut>(
+    auth_token: &str,
+    fetch_sheet_values: F,
+) -> Result<Vec<MigrosKeysRow>>
+where
+    F: Fn(&str, &str, &str) -> Fut + Send + Sync,
+    Fut: Future<Output = Result<GoogleSheetResponse>> + Send,
+{
+    let sheet_values = fetch_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
         .await
         .with_context(|| "❌ Migros key sheet verileri alınamadı")?;
 
@@ -70,17 +98,11 @@ pub async fn filter_migros_keys_by_branch(
         }
     }
 
-    let filtered_keys: Vec<MigrosKeysRow> = parsed_keys
-        .into_iter()
-        .filter(|key| key.branch_name == branch_name)
-        .collect();
-
     info!(
-        "✅ '{}' şubesi için {} anahtar bulundu. Atlanan satır sayısı: {}",
-        branch_name,
-        filtered_keys.len(),
+        "✅ Migros için {} anahtar bulundu. Atlanan satır sayısı: {}",
+        parsed_keys.len(),
         skipped_count
     );
 
-    Ok(filtered_keys)
+    Ok(parsed_keys)
 }
