@@ -17,6 +17,7 @@ use tokio::{
 };
 
 use crate::schemas::struct_google_api::GoogleSheetResponse;
+use crate::services::google_api_sheet::get_sheet_values;
 use crate::schemas::struct_migros::{MigrosKeysRow};
 
 const KEYS_SHEET_ID: &str = "1accka-4YjSUwd27UNgG3xcpWy4Inz0W4E_NVNfT3-xk";
@@ -49,39 +50,46 @@ pub fn parse_migros_keys(row: &[String]) -> Result<MigrosKeysRow> {
     })
 }
 
-pub async fn filter_migros_keys_by_branch<F, Fut>(
+pub async fn filter_migros_keys_by_branch(
     auth_token: &str,
     branch_name: &str,
-    get_migros_keys: F,
-) -> Result<Vec<MigrosKeysRow>>
-where
-    F: Fn(&str) -> Fut + Send + Sync,
-    Fut: Future<Output = Result<Vec<MigrosKeysRow>>> + Send,
-{
-    let keys = get_migros_keys(auth_token).await?;
-    let filtered_keys: Vec<MigrosKeysRow> = keys
+) -> Result<Vec<MigrosKeysRow>> {
+    let sheet_values = get_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
+        .await
+        .with_context(|| "❌ Migros key sheet verileri alınamadı")?;
+
+    let mut parsed_keys = vec![];
+    let mut skipped_count = 0;
+
+    for (i, row) in sheet_values.values.iter().enumerate() {
+        match parse_migros_keys(row) {
+            Ok(parsed) => parsed_keys.push(parsed),
+            Err(e) => {
+                skipped_count += 1;
+                warn!("⚠️ Satır {} parse edilemedi → Hata: {:?}", i + 1, e);
+            }
+        }
+    }
+
+    let filtered_keys: Vec<MigrosKeysRow> = parsed_keys
         .into_iter()
         .filter(|key| key.branch_name == branch_name)
         .collect();
 
     info!(
-        "✅ '{}' şubesi için {} anahtar bulundu.",
+        "✅ '{}' şubesi için {} anahtar bulundu. Atlanan satır sayısı: {}",
         branch_name,
         filtered_keys.len(),
+        skipped_count
     );
 
     Ok(filtered_keys)
 }
 
-pub async fn get_migros_keys<F, Fut>(
+pub async fn get_migros_keys(
     auth_token: &str,
-    fetch_sheet_values: F,
-) -> Result<Vec<MigrosKeysRow>>
-where
-    F: for<'a, 'b, 'c> Fn(&'a str, &'b str, &'c str) -> Fut + Send + Sync,
-    Fut: Future<Output = Result<GoogleSheetResponse>> + Send,
-{
-    let sheet_values = fetch_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
+) -> Result<Vec<MigrosKeysRow>> {
+    let sheet_values = get_sheet_values(KEYS_SHEET_ID, MIGROS_KEYS_RANGE, auth_token)
         .await
         .with_context(|| "❌ Migros key sheet verileri alınamadı")?;
 
