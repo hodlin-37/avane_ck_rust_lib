@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use deadpool_postgres::{Manager, Pool};
-use tokio_postgres::{Config, NoTls, types::ToSql};
+use tokio_postgres::{Config, NoTls, Row, types::ToSql};
 
 pub async fn pg_host_client(
     host: &str,
@@ -83,4 +83,22 @@ pub async fn pg_insert_rows(
     println!("✅ {} satır INSERT edildi", affected);
 
     Ok(())
+}
+
+pub async fn pg_select_with_query(
+    pool: &Pool,
+    query: &str,
+) -> Result<Vec<Row>> {
+    let client = pool
+        .get()
+        .await
+        .context("Veritabanı bağlantısı alınamadı")?;
+
+    let rows = client
+        .query(query, &[])
+        .await
+        .context("SELECT sorgusu başarısız")?;
+
+    println!("✅ SELECT sorgusu başarıyla çalıştırıldı");
+    Ok(rows)
 }
