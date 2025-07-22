@@ -100,3 +100,26 @@ pub async fn append_sheet_values(
 
     Ok(())
 }
+
+pub async fn clear_sheet_range (
+    spreadsheet_id: &str,
+    range: &str,
+    access_token: &str,
+) -> Result<()> {
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:clear?access_token={}",
+        spreadsheet_id, range, access_token
+    );
+
+    let response: Response = http_request_post(&url, &serde_json::json!({}), None)
+        .await
+        .with_context(|| format!("❌ Sheet aralığını temizleme başarısız → spreadsheet_id: {}", spreadsheet_id))?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("❌ Sheet aralığını temizleme başarısız, HTTP Status: {}", response.status()));
+    }
+
+    info!("✅ Sheet aralığı temizlendi → spreadsheet_id: '{}', range: '{}'", spreadsheet_id, range);
+
+    Ok(())
+}
