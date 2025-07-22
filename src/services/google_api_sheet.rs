@@ -4,6 +4,7 @@ use reqwest::Response;
 use anyhow::{Result, Context};
 use log::{info};
 use std::collections::HashMap;
+use serde::Serialize;
 
 pub async fn get_sheet_values(
     spreadsheet_id: &str,
@@ -73,30 +74,37 @@ pub async fn get_spreadsheet_by_name(
     Ok(file_id)
 }
 
-pub async fn append_sheet_values(
+pub async fn append_sheet_values<T>(
     spreadsheet_id: &str,
     range: &str,
-    values: Vec<Vec<String>>,
+    values: T,
     access_token: &str,
-) -> Result<()> {
+) -> Result<()>
+where
+    T: Serialize,
+{
     let url = format!(
         "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:append?valueInputOption=USER_ENTERED&access_token={}",
         spreadsheet_id, range, access_token
     );
 
-    let body = serde_json::json!({
-        "values": values
-    });
+    let body = serde_json::json!({ "values": values });
 
     let response: Response = http_request_post(&url, &body, None)
         .await
         .with_context(|| format!("❌ Sheet verisi alınamadı → spreadsheet_id: {}", spreadsheet_id))?;
 
     if !response.status().is_success() {
-        return Err(anyhow::anyhow!("❌ Sheet'e veri ekleme başarısız, HTTP Status: {}", response.status()));
+        return Err(anyhow::anyhow!(
+            "❌ Sheet'e veri ekleme başarısız, HTTP Status: {}",
+            response.status()
+        ));
     }
 
-    info!("✅ Sheet'e veri eklendi → spreadsheet_id: '{}', range: '{}'", spreadsheet_id, range);
+    info!(
+        "✅ Sheet'e veri eklendi → spreadsheet_id: '{}', range: '{}'",
+        spreadsheet_id, range
+    );
 
     Ok(())
 }
