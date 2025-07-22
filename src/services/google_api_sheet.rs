@@ -1,4 +1,4 @@
-use crate::{schemas::struct_google_api::{GoogleSheetResponse, GoogleDriveFileListResponse}, utils::http::http_request_get};
+use crate::{schemas::struct_google_api::{GoogleSheetResponse, GoogleDriveFileListResponse}, utils::http::{http_request_get, http_request_post}};
 use urlencoding::encode;
 use reqwest::Response;
 use anyhow::{Result, Context};
@@ -11,7 +11,7 @@ pub async fn get_sheet_values(
     access_token: &str,
 ) -> Result<GoogleSheetResponse> {
     let url = format!(
-        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}?access_token={}",
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:append?access_token={}",
         spreadsheet_id, range, access_token
     );
 
@@ -71,4 +71,32 @@ pub async fn get_spreadsheet_by_name(
     info!("✅ Spreadsheet bulundu → '{}', file_id: '{}'", spreadsheet_name, file_id);
 
     Ok(file_id)
+}
+
+pub async fn append_sheet_values(
+    spreadsheet_id: &str,
+    range: &str,
+    values: Vec<Vec<String>>,
+    access_token: &str,
+) -> Result<()> {
+    let url = format!(
+        "https://sheets.googleapis.com/v4/spreadsheets/{}/values/{}:append?valueInputOption=USER_ENTERED&access_token={}",
+        spreadsheet_id, range, access_token
+    );
+
+    let body = serde_json::json!({
+        "values": values
+    });
+
+    let response: Response = http_request_post(&url, &body, None)
+        .await
+        .with_context(|| format!("❌ Sheet verisi alınamadı → spreadsheet_id: {}", spreadsheet_id))?;
+
+    if !response.status().is_success() {
+        return Err(anyhow::anyhow!("❌ Sheet'e veri ekleme başarısız, HTTP Status: {}", response.status()));
+    }
+
+    info!("✅ Sheet'e veri eklendi → spreadsheet_id: '{}', range: '{}'", spreadsheet_id, range);
+
+    Ok(())
 }
